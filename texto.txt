@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ULTRA PRO AI TOTAL</title>
+
+<style>
+body {background:#000;color:#0f0;font-family:Arial;padding:15px;}
+input,button{width:100%;padding:12px;margin:5px 0;border-radius:10px;border:none}
+button{background:#0f0;color:#000;font-weight:bold}
+.box{background:#111;padding:10px;border-radius:10px;margin-top:10px}
+canvas{background:#111;margin-top:10px;border-radius:10px}
+h2{text-align:center}
+.bar{height:8px;background:#0f0;margin:3px 0}
+</style>
+</head>
+
+<body>
+
+<h2>ULTRA PRO AI TOTAL</h2>
+
+<input id="nums" placeholder="30,3,1,24">
+<input id="valor" placeholder="Valor entrada">
+
+<button onclick="analisar()">ANALISAR</button>
+<button onclick="win()">WIN</button>
+<button onclick="loss()">LOSS</button>
+
+<div id="res" class="box"></div>
+<div id="zonaBox" class="box"></div>
+<div id="stats" class="box"></div>
+<canvas id="graf" width="320" height="160"></canvas>
+
+<script>
+
+let saldo=JSON.parse(localStorage.getItem("saldo"))||0;
+let wins=JSON.parse(localStorage.getItem("wins"))||0;
+let losses=JSON.parse(localStorage.getItem("losses"))||0;
+let historico=JSON.parse(localStorage.getItem("hist"))||[];
+
+let memoria=JSON.parse(localStorage.getItem("mem"))||{
+ bloco:{},paridade:{},zona:{}
+};
+
+const blocos={
+A:[1,10,19,28],B:[2,11,20,29],C:[3,12,21,30],
+D:[4,13,22,31],E:[5,14,23,32],F:[6,15,24,33],
+G:[7,16,25,34],H:[8,17,26,35],I:[9,18,27,36]
+};
+
+const vizinhos={
+0:[26,3],1:[20,14],2:[25,17],3:[26,0],4:[21,19],
+5:[24,10],6:[27,13],7:[28,12],8:[23,30],9:[22,31],
+10:[5,24],11:[30,8],12:[28,7],13:[6,27],14:[20,1],
+15:[33,16],16:[15,33],17:[2,25],18:[29,22],
+19:[4,21],20:[1,14],21:[19,4],22:[18,9],
+23:[8,30],24:[5,10],25:[17,2],26:[0,3],
+27:[6,13],28:[7,12],29:[18,22],30:[8,23],
+31:[9,22],32:[11,15],33:[15,16],34:[17,20],
+35:[12,28],36:[11,30]
+};
+
+function getBloco(n){
+ for(let b in blocos){
+  if(blocos[b].includes(n)) return b;
+ }
+ return "-";
+}
+
+function getZona(n){
+ if(n<=12) return "BAIXA";
+ if(n<=24) return "MEDIA";
+ return "ALTA";
+}
+
+function analisar(){
+
+ let nums=document.getElementById("nums").value
+ .split(",").map(n=>parseInt(n.trim())).filter(n=>!isNaN(n));
+
+ if(nums.length<4){
+  alert("mínimo 4 números");
+  return;
+ }
+
+ let blocosSeq=nums.map(getBloco);
+
+ let freq={};
+ blocosSeq.forEach(b=>freq[b]=(freq[b]||0)+1);
+
+ let dominante=Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0];
+
+ let pares=nums.filter(n=>n%2==0).length;
+ let paridade=pares>nums.length/2?"PAR":"IMPAR";
+ let jogar=paridade=="PAR"?"IMPAR":"PAR";
+
+ let zona=getZona(nums[0]);
+
+ // 🎯 vizinho adaptativo
+ let nivel=1;
+ if(losses>=3) nivel=3;
+ else if(losses>=1) nivel=2;
+
+ let base=blocos[dominante].filter(n=>jogar=="PAR"?n%2==0:n%2!=0);
+
+ let entrada=[...base];
+
+ base.forEach(n=>{
+ if(vizinhos[n]){
+  entrada.push(...vizinhos[n].slice(0,nivel));
+ }
+ });
+
+ entrada=[...new Set(entrada)];
+
+ // 🧠 IA MULTI
+ memoria.bloco[dominante]=memoria.bloco[dominante]||{w:0,l:0};
+ memoria.paridade[paridade]=memoria.paridade[paridade]||{w:0,l:0};
+ memoria.zona[zona]=memoria.zona[zona]||{w:0,l:0};
+
+ let score=
+ (memoria.bloco[dominante].w - memoria.bloco[dominante].l)*4 +
+ (memoria.paridade[paridade].w - memoria.paridade[paridade].l)*3 +
+ (memoria.zona[zona].w - memoria.zona[zona].l)*2;
+
+ let confianca=65 + score + (wins-losses)*2;
+
+ let status="🔴 NÃO ENTRAR";
+ if(confianca>=70) status="🟡 AGUARDAR";
+ if(confianca>=80) status="🟢 🚨 ENTRAR AGORA";
+
+ document.getElementById("res").innerHTML=`
+${status}<br>
+Bloco: ${dominante}<br>
+Zona: ${zona}<br>
+Paridade: ${paridade}<br>
+Confiança: ${confianca}%<br><br>
+🎯 ${entrada.join(", ")}
+`;
+
+ // gráfico zona
+ let b=nums.filter(n=>n<=12).length;
+ let m=nums.filter(n=>n>12&&n<=24).length;
+ let a=nums.filter(n=>n>24).length;
+
+ document.getElementById("zonaBox").innerHTML=`
+BAIXA ${b}<div class="bar" style="width:${b*20}px"></div>
+MEDIA ${m}<div class="bar" style="width:${m*20}px"></div>
+ALTA ${a}<div class="bar" style="width:${a*20}px"></div>
+`;
+
+ salvar();
+}
+
+function win(){
+ saldo+=parseFloat(document.getElementById("valor").value)||0;
+ wins++;
+ registrar(true);
+}
+
+function loss(){
+ saldo-=parseFloat(document.getElementById("valor").value)||0;
+ losses++;
+ registrar(false);
+}
+
+function registrar(win){
+
+ let txt=document.getElementById("res").innerText;
+
+ let bloco=txt.match(/Bloco: (.)/)[1];
+ let zona=txt.match(/Zona: (.*)/)[1];
+ let paridade=txt.match(/Paridade: (.*)/)[1];
+
+ win?memoria.bloco[bloco].w++:memoria.bloco[bloco].l++;
+ win?memoria.paridade[paridade].w++:memoria.paridade[paridade].l++;
+ win?memoria.zona[zona].w++:memoria.zona[zona].l++;
+
+ historico.push(saldo);
+
+ salvar();
+ atualizar();
+}
+
+function salvar(){
+ localStorage.setItem("saldo",saldo);
+ localStorage.setItem("wins",wins);
+ localStorage.setItem("losses",losses);
+ localStorage.setItem("hist",JSON.stringify(historico));
+ localStorage.setItem("mem",JSON.stringify(memoria));
+}
+
+function atualizar(){
+
+ let total=wins+losses;
+ let acc= total? ((wins/total)*100).toFixed(1):0;
+
+ document.getElementById("stats").innerHTML=`
+💰 ${saldo}<br>
+✅ ${wins} | ❌ ${losses}<br>
+📈 ${acc}%
+`;
+
+ let c=document.getElementById("graf");
+ let ctx=c.getContext("2d");
+
+ ctx.clearRect(0,0,320,160);
+
+ let min=Math.min(...historico,0);
+ let max=Math.max(...historico,10);
+
+ ctx.beginPath();
+
+ historico.forEach((v,i)=>{
+  let x=i*12;
+  let y=160 - ((v-min)/(max-min))*140;
+  if(i==0) ctx.moveTo(x,y);
+  else ctx.lineTo(x,y);
+ });
+
+ ctx.strokeStyle="#0f0";
+ ctx.stroke();
+}
+
+atualizar();
+
+</script>
+
+</body>
+</html>
